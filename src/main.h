@@ -32,9 +32,6 @@ volatile unsigned int sistemMiliSaati=0;
 
 char str[64];
 
-
-s16 sicaklik, sicakH = 0, sicakL = 0;
-
 volatile short MyDelay;
 
 void SysTick_Handler(void);
@@ -50,42 +47,20 @@ void MPU9150_writeSensor(uint8_t regAddr,uint8_t data);
 
 
 
-
-
-struct HamVeri
-{
-    int16_t accelX, accelY, accelZ;
-    int16_t gyroX, gyroY, gyroZ;
-    int16_t magX, magY, magZ;
-} hamVeri;
-
-struct Acilar
-{
-    double pitch, roll, theta;
-    double gyroX, gyroY, gyroZ;
-    int pitch_int, roll_int, theta_int;
-} acilar;
-
-
-
-
-double clickAcceLog[100];
-double clickGyroLog[100];
-
 #define PI 3.14159265f
 
-
-int artmaSayisi = 0;
-int artmaBaslangici = 0;
-int azalmaBaslangici = 0;
-int azalmaSayisi = 0;
 
 volatile unsigned int i2c_kontrol_sayaci=0;
 
 
+void EulerHesapla(int16_t x, int16_t y, int16_t z, double *pitch, double *roll);
 
-void aciOku(void);
-void EulerHesapla(int16_t x, int16_t y, int16_t z);
+void AccelOku(int16_t *x, int16_t *y, int16_t *z);
+void GyroOku(int16_t *x, int16_t *y, int16_t *z);
+void MagnetOku(int16_t *x, int16_t *y, int16_t *z);
+void ThermoOku(unsigned char *sicaklikTam,unsigned char *sicaklikVirgul);
+
+float EsasOlcu(float position);
 
 void SysTick_Handler(void)
 {
@@ -179,12 +154,29 @@ void initGPIO()
     GPIO_Init(GPIOD, &GPIO_InitStructure);
 }
 
-void aciOku(void)
+
+
+void AccelOku(int16_t *x, int16_t *y, int16_t *z)
 {
-    u8 tmpBuffer[14];
+    u8 tmpBuffer[6];
 
+    MPU6050_I2C_BufferRead(0x68 << 1, tmpBuffer, 0x3B, 6); // ACCELEROMETER
+    s16 AccXH = tmpBuffer[0];
+    s16 AccXL = tmpBuffer[1];
+    s16 AccYH = tmpBuffer[2];
+    s16 AccYL = tmpBuffer[3];
+    s16 AccZH = tmpBuffer[4];
+    s16 AccZL = tmpBuffer[5];
 
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////
+    *x = ((s16) ((u16) AccXH << 8) + AccXL);
+    *y = ((s16) ((u16) AccYH << 8) + AccYL);
+    *z = ((s16) ((u16) AccZH << 8) + AccZL);
+}
+
+void GyroOku(int16_t *x, int16_t *y, int16_t *z)
+{
+    u8 tmpBuffer[6];
+
     MPU6050_I2C_BufferRead(0x68 << 1, tmpBuffer, 0x43, 6); // GYRO
 
     s16 GyroXH = tmpBuffer[0];
@@ -194,31 +186,15 @@ void aciOku(void)
     s16 GyroZH = tmpBuffer[4];
     s16 GyroZL = tmpBuffer[5];
 
-    hamVeri.gyroX = ((s16) ((u16) GyroXH << 8) + GyroXL);
-    hamVeri.gyroY = ((s16) ((u16) GyroYH << 8) + GyroYL);
-    hamVeri.gyroZ = ((s16) ((u16) GyroZH << 8) + GyroZL);
+    *x = ((s16) ((u16) GyroXH << 8) + GyroXL);
+    *y = ((s16) ((u16) GyroYH << 8) + GyroYL);
+    *z = ((s16) ((u16) GyroZH << 8) + GyroZL);
 
+}
+void MagnetOku(int16_t *x, int16_t *y, int16_t *z)
+{
+    u8 tmpBuffer[6];
 
-
-
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////
-    MPU6050_I2C_BufferRead(0x68 << 1, tmpBuffer, 0x3B, 6); // ACCELEROMETER
-    s16 AccXH = tmpBuffer[0];
-    s16 AccXL = tmpBuffer[1];
-    s16 AccYH = tmpBuffer[2];
-    s16 AccYL = tmpBuffer[3];
-    s16 AccZH = tmpBuffer[4];
-    s16 AccZL = tmpBuffer[5];
-
-    hamVeri.accelX = ((s16) ((u16) AccXH << 8) + AccXL);
-    hamVeri.accelY = ((s16) ((u16) AccYH << 8) + AccYL);
-    hamVeri.accelZ = ((s16) ((u16) AccZH << 8) + AccZL);
-
-
-
-
-    /////////////////////////////////////////////////////////////////////////////////////////////////////////
     i2c_adresi=MPU6050_MAG_ADDRESS;
 
     MPU9150_writeSensor(0x0A, 0x01);//enable the magnetometer
@@ -233,7 +209,6 @@ void aciOku(void)
     //MPU6050_I2C_BufferRead(MPU6050_DEFAULT_ADDRESS, tmpBuffer, MPU6050_RA_EXT_SENS_DATA_00, 6); // magneto
 
 
-
     s16 MagXH = tmpBuffer[0];
     s16 MagXL = tmpBuffer[1];
     s16 MagYH = tmpBuffer[2];
@@ -241,33 +216,56 @@ void aciOku(void)
     s16 MagZH = tmpBuffer[4];
     s16 MagZL = tmpBuffer[5];
 
-    hamVeri.magX = ((s16) ((u16) MagXH << 8) + MagXL);
-    hamVeri.magY = ((s16) ((u16) MagYH << 8) + MagYL);
-    hamVeri.magZ = ((s16) ((u16) MagZH << 8) + MagZL);
-
-
-
-
+    *x = ((s16) ((u16) MagXH << 8) + MagXL);
+    *y = ((s16) ((u16) MagYH << 8) + MagYL);
+    *z = ((s16) ((u16) MagZH << 8) + MagZL);
 }
 
-void EulerHesapla(int16_t x, int16_t y, int16_t z)
+void ThermoOku(unsigned char *sicaklikTam,unsigned char *sicaklikVirgul)
 {
+    u8 tmpBuffer[2];
+    MPU6050_I2C_BufferRead(MPU6050_DEFAULT_ADDRESS, tmpBuffer, MPU6050_RA_TEMP_OUT_H, 2);
 
-    acilar.pitch = x / sqrt((y*y) + (z*z));
-    acilar.pitch = atan(acilar.pitch) * 180;
-    acilar.pitch = acilar.pitch / PI;
-    acilar.pitch = round(acilar.pitch);
+    s16 sicakH=tmpBuffer[0];
+    s16 sicakL=tmpBuffer[1];
+    s16 sicaklik=((s16)((u16)sicakH << 8) + sicakL);
 
+    //sicaklik=(sicaklik + 12412.0) / 340.0;
+    //ref. man. sayfa 29: Temperature in degrees C = (TEMP_OUT Register Value as a signed quantity)/340 + 35
+    //sprintf(str,"sicaklik: %d \r\n",sicaklik);
+    //bilgi: http://playground.arduino.cc/Main/MPU-9150
 
-    acilar.roll = y / sqrt((x*x) + (z*z));
-    acilar.roll = atan(acilar.roll) * 180;
-    acilar.roll = acilar.roll / PI;
-    acilar.roll = round(acilar.roll);
+    float sicak=(sicaklik / 340.0) + 35;
 
-    //acilar.pitch_int=(int16_t)acilar.pitch;
-    acilar.roll_int=(int16_t)acilar.roll;
+    *sicaklikTam=(u16)sicak;
+    *sicaklikVirgul=(sicak*100)-((u16)sicak*100); //virgul kisi iki basamaklı olmasi icin 100 ile carptik, 10 ile carpsak virgul tek basamakli olurdu
+
 }
 
+
+void EulerHesapla(int16_t x, int16_t y, int16_t z, double *pitch, double *roll)
+{
+    *pitch = x / sqrt((y*y) + (z*z));
+    *pitch = atan(*pitch) * 180;
+    *pitch = *pitch / PI;
+    *pitch = round(*pitch);
+
+    *roll = y / sqrt((x*x) + (z*z));
+    *roll = atan(*roll) * 180;
+    *roll = *roll / PI;
+    *roll = round(*roll);
+}
+
+float EsasOlcu(float position){
+	if (position > 360.00){
+		position = position - 360.00;
+	}
+	else if (position < 0){
+		position = 360 + position;
+	}
+
+	return position;
+}
 
 
 
@@ -379,4 +377,17 @@ void I2C_Kilitlenmesi(void)
     }
 }
 
+/*
+Yön bulma:
+		if ((acilar.theta >= 338 && acilar.theta <= 360) || (acilar.theta >= 0 && acilar.theta <= 22)) cout << " kuzey" << endl;
+		else if (acilar.theta >= 23 && acilar.theta <= 67) cout << " kuzey bati" << endl;
+		else if (acilar.theta >= 68 && acilar.theta <= 112) cout << " bati" << endl;
+		else if (acilar.theta >= 113 && acilar.theta <= 157) cout << " guney bati" << endl;
+		else if (acilar.theta >= 158 && acilar.theta <= 202) cout << " guney" << endl;
+		else if (acilar.theta >= 203 && acilar.theta <= 248) cout << " guney dogu" << endl;
+		else if (acilar.theta >= 249 && acilar.theta <= 292) cout << " dogu" << endl;
+		else if (acilar.theta >= 293 && acilar.theta <= 337) cout << " kuzey dogu" << endl;
+
+
+*/
 

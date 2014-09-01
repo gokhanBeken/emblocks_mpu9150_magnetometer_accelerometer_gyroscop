@@ -32,22 +32,44 @@ int main(void)
 
     while (1)
     {
+        unsigned char thermoTam=0,thermoVirgul=0;
+        int16_t accelX=0, accelY=0, accelZ=0;
+        int16_t gyroX=0, gyroY=0, gyroZ=0;
+        int16_t magX=0, magY=0, magZ=0;
+        double pitch=0,roll=0;
 
-        aciOku();
-        float pusulaDerece=atan2(hamVeri.magY,hamVeri.magX) * 180 / PI;
 
-        sprintf(str, "gyrx: %d , gyroy: %d , gyroz: %d , \r\n", hamVeri.gyroX,hamVeri.gyroY,hamVeri.gyroZ);
+
+
+        GyroOku(&gyroX,&gyroY,&gyroZ);
+        sprintf(str, "gyrx: %d , gyroy: %d , gyroz: %d , \r\n", gyroX,gyroY,gyroZ);
         USART_puts(USART2, str);
 
-        sprintf(str, "accelx: %d , accely: %d , accelz: %d , \r\n", hamVeri.accelX,hamVeri.accelY,hamVeri.accelZ);
-    	USART_puts(USART2, str);
-
-        sprintf(str, "pusula: %d MagX: %d , MagY: %d , MagZ: %d , \r\n", (int)pusulaDerece, hamVeri.magX,hamVeri.magY,hamVeri.magZ);
+        AccelOku(&accelX,&accelY,&accelZ);
+        sprintf(str, "accelx: %d , accely: %d , accelz: %d , \r\n", accelX,accelY,accelZ);
         USART_puts(USART2, str);
 
-        EulerHesapla(hamVeri.accelX,hamVeri.accelY,hamVeri.accelZ);
-        sprintf(str, "pitch: %d , roll: %d , theta: %d \r\n", (int)acilar.pitch,(int)acilar.roll,(int)pusulaDerece);
-    	USART_puts(USART2, str);
+        MagnetOku(&magX,&magY,&magZ);
+        float pusulaDerece=atan2(magY,magX) * 180 / PI;
+		pusulaDerece = round(pusulaDerece);
+		pusulaDerece = EsasOlcu(pusulaDerece);
+		pusulaDerece -= 63; //kalibre deðeri
+		pusulaDerece = EsasOlcu(pusulaDerece);
+
+
+
+        sprintf(str, "pusula: %d MagX: %d , MagY: %d , MagZ: %d , \r\n", (int)pusulaDerece, magX,magY,magZ);
+        USART_puts(USART2, str);
+
+
+        EulerHesapla(accelX,accelY,accelZ,&pitch,&roll);
+        sprintf(str, "pitch: %d , roll: %d , theta: %d \r\n", (int)pitch,(int)roll,(int)pusulaDerece);
+        USART_puts(USART2, str);
+
+        ThermoOku(&thermoTam,&thermoVirgul);
+        sprintf(str,"sicaklik: %d,%d'C \r\n",thermoTam,thermoVirgul);
+        USART_puts(USART2, str);
+
 
 
         GPIO_ToggleBits(GPIOD,GPIO_Pin_12 | GPIO_Pin_13 | GPIO_Pin_14 | GPIO_Pin_15);
